@@ -1,0 +1,63 @@
+Ok, so here's a README for an IRC bot *before* I right royally screwed up by accidentially deleting the whole damn lot! 
+
+Moral of the story? 
+
+COMIT BEFORE YOU FUCK UP NOT AFTER! ;)
+
+*sigh* ok well I wonder how long it will take me to rewrite it...
+
+Erlbot
+======
+
+A project to teach me erlang, coincidentially also an IRC bot!
+
+Supported bot commands:
+	
+	Join Channel: 
+		-channel join #channel
+		
+		Joins a channel.
+	
+	Part Channel: 
+		-channel part #channel
+		
+		Parts a channel.
+	
+	List Channels: 
+		-channel list
+		
+		Returns a list of running channel processes.
+	
+	Register Plugin:
+		-plugin register #channel <gen_server callback module>
+		
+		Spawns a gen_server callback module and registers it with
+		the channel process.
+
+Vaguely How it Works
+====================
+
+A 'server' process is spawned, this is responsible for handling the socket to the server. Currently it also handles logging in to the IRC server by spawning a login process. This just waits a few seconds then sends the USER/NICK commands. The 'server' reads data from the socket, splits it into lines, then sends those lines individually to the 'bot' process.
+
+On receiving a line, the bot spawns a process to parse the line. If the line can't be parsed then the parse process crashes, if it is successfully parsed then a message is sent back to the bot process containing the parsed packet as an erlang term.
+
+Upon receiving an IRC packet containing a PRIVMSG sent directly from the bot owner to the bot, then spawn a handle_bot_command process and pass it the packet. If the packet doesn't contain a bot command for any reason, then the handle_bot_command process will crash and no action will be taken.
+
+A bot command to join a channel will spawn a new 'channel' process and send a cast to it telling it to join. A channel process will stay alive after you part the channel, letting you keep any registered plugins.
+
+When the bot receives a PRIVMSG sent to a channel then that packet will be relayed to the process handling that channel.
+
+At the moment, all the channel process do is relay the IRC event to the plugins, but the IRC packet isn't sent, instead a simpler, more concise term structure is used.
+
+There is a seperate process per plugin, per channel. Currently they're only spawned through the IRC -plugin register <#channel> <module> command.
+
+Plugins
+=======
+
+Plugins are gen_server processes that accept a cast of: 
+
+{ ChannelPid, privmsg, FromNick, Message }
+
+Messages can be sent to a channel using: 
+
+channel:say( ChannelPid, "message" ).

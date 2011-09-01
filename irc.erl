@@ -5,6 +5,7 @@
 	parse_header/1,
 	join/1,
 	part/1,
+	part/2,
 	quit/0,
 	quit/1,
 	say/2,
@@ -72,6 +73,12 @@ part( Channel ) ->
 	case ?MODULE:valid_channel_name( Channel ) of
 		false -> { error, "Invalid Channel Name" };
 		_     -> lists:concat( [ "PART ", Channel, "\r\n" ] )
+	end.
+
+part( Channel, Message ) ->
+	case ?MODULE:valid_channel_name( Channel ) of
+		false -> { error, "Invalid Channel Name" };
+		_     -> lists:concat( [ "PART ", Channel, " :", Message, "\r\n" ] )
 	end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

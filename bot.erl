@@ -14,7 +14,8 @@
 	pid,
 	nick,
 	owner,
-	server_pid
+	server_pid,
+	channels
 } ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -58,7 +59,8 @@ init( [ Host, Owner, Nick ] ) ->
 		owner = Owner,
 		nick = Nick,
 		pid = self(),
-		server_pid = Server
+		server_pid = Server,
+		channels = []
 	},
 	{ ok, State }.
 
@@ -74,18 +76,27 @@ handle_call( _Request, _From, State ) ->
 %% Join a channel
 %%------------------------------------------------------------------------------
 handle_cast( { join, Channel }, State ) ->
-	case irc:join( Channel ) of
-		{ error, Reason } -> io:format( "Join Error: ~p~n", [ Reason ] );
-		Irc               -> State#state.server_pid ! { send, Irc }
+	NewState = case proplists:lookup( Channel, State#state.channels ) of
+		none -> 
+			{ ok, Pid } = channel:start_link( self(), State#state.server_pid, Channel ),
+			channel:join( Pid ),
+			State#state{ channels = [ { Channel, Pid } | State#state.channels ] };
+		
+		{ _, Pid } -> 
+			channel:join( Pid ),
+			State
 	end,
-	{ noreply, State };
+	{ noreply, NewState };
 %%------------------------------------------------------------------------------
 %% Part a channel
 %%------------------------------------------------------------------------------
 handle_cast( { part, Channel, Message }, State ) ->
-	case irc:part( Channel, Message ) of
-		{ error, Reason } -> io:format( "Part Error: ~p~n", [ Reason ] );
-		Irc               -> State#state.server_pid ! { send, Irc }
+	case proplists:lookup( Channel, State#state.channels ) of
+		none -> ok;
+		
+		{ _, Pid } -> 
+			channel:part( Pid, Message ),
+			State
 	end,
 	{ noreply, State };
 %%------------------------------------------------------------------------------
@@ -100,7 +111,16 @@ handle_cast( { privmsg, Recipient, Message }, State ) ->
 handle_cast( { irc, Packet = { { [ Nick | _ ], "PRIVMSG", To, _ }, [ $- | _ ] }, _ }, State ) 
 when Nick == State#state.owner, To == State#state.nick ->
 	echo( Packet ),
-	spawn( fun() -> handle_command( State, Packet ) end ),
+	process_flag( trap_exit, true ),
+	spawn_link( fun() -> handle_command( State, Packet ) end ),
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% IRC PRIVMSGs
+%%------------------------------------------------------------------------------
+handle_cast( { irc, Packet = { { _, "PRIVMSG", To = "#" ++ _, _ }, _ }, _Line }, State ) ->
+	case proplists:lookup( To, State#state.channels ) of
+		{ _, Pid } -> gen_server:cast( Pid, Packet )
+	end,
 	{ noreply, State };
 %%------------------------------------------------------------------------------
 %% Catch all IRC packets
@@ -173,10 +193,19 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 			State#state.server_pid ! { send, irc:privmsg( Nick, string:join( Tail, " " ) ) };
 		
 		%% Join a channel
-		[ "join", Channel ] -> bot:join( State#state.pid, Channel );
+		[ "channel", "join", Channel ] -> 
+			bot:join( State#state.pid, Channel );
 			
 		%% Part a channel
-		[ "part", Channel ] -> bot:part( State#state.pid, Channel );
+		[ "channel", "part", Channel ] -> 
+			bot:part( State#state.pid, Channel );
+		
+		%% List channels
+		[ "channel", "list" ] -> 
+			gen_server:cast( State#state.pid, { privmsg, Nick, "Channels: " } ),
+			lists:foreach( fun( { Channel, _ } ) ->
+				gen_server:cast( State#state.pid, { privmsg, Nick, lists:concat( [ "  ", Channel ] ) } )
+			end, State#state.channels );
 		
 		%% Inject Raw IRC
 		[ "raw" | Tail ] ->

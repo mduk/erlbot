@@ -65,7 +65,6 @@ loop( State ) ->
 	
 		%% IRC Packet Catch-all
 		{ irc, Packet, _Raw } ->
-			echo( { [ "Got a irc packet: ~p~n" ], [ Packet ] } ),
 			echo( Packet ),
 			?MODULE:loop( State );
 		

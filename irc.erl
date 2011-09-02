@@ -8,7 +8,7 @@
 	part/2,
 	quit/0,
 	quit/1,
-	say/2,
+	privmsg/2,
 	valid_channel_name/1
 ] ).
 
@@ -94,9 +94,9 @@ quit( Message ) ->
 	lists:concat( [ "QUIT :", Message, "\r\n" ] ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% say/2
+%% privmsg/2
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-say( Channel, Message ) ->
+privmsg( Channel, Message ) ->
 	lists:concat( [ "PRIVMSG ", Channel, " :", Message, "\r\n" ] ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

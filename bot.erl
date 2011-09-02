@@ -43,129 +43,19 @@ loop( State ) ->
 	MyNick = State#state.nick,
 	receive
 	
-		{ irc, { { _, "NOTICE", _, _ }, Body }, _ } ->
-			io:format( lists:concat( [ "Notice: ", Body, "~n" ] ) ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "MODE", _, Args }, _ }, _ } ->
-			io:format( lists:concat( [ "Mode: ", string:join( Args, ", " ), "~n" ] ) ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "001", _, _ }, Body }, _ } ->
-			io:format( lists:concat( [ "Welcome: ", Body, "~n" ] ) ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "002", _, _ }, Body }, _ } ->
-			io:format( lists:concat( [ "Host: ", Body, "~n" ] ) ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "003", _, _ }, Body }, _ } ->
-			io:format( lists:concat( [ "History: ", Body, "~n" ] ) ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "004", _, Args }, _ }, _ } ->
-			io:format( lists:concat( [ "Uhh...: ", string:join( Args, ", " ), "~n" ] ) ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "005", _, _ }, _ }, _ } ->
-			io:format( "Options: Boring!~n" ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "042", _, Args }, _ }, _ } ->
-			[ Id ] = Args,
-			io:format( "Unique ID: ~p~n", [ Id ] ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "252", _, Args }, _ }, _ } ->
-			[ Ops ] = Args,
-			io:format( "Operators Online: ~s~n", [ Ops ] ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "251", _, _ }, Body }, _ } ->
-			io:format( "Info: ~s~n", [ Body ] ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "254", _, Args }, _ }, _ } ->
-			[ Channels ] = Args,
-			io:format( "Active Channels: ~s~n", [ Channels ] ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "255", _, _ }, Body }, _ } ->
-			io:format( "Info: ~s~n", [ Body ] ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "265", _, _ }, Body }, _ } ->
-			io:format( "Local Load: ~s~n", [ Body ] ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "266", _, _ }, Body }, _ } ->
-			io:format( "Global Load: ~s~n", [ Body ] ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "372", _, _ }, Body }, _ } ->
-			io:format( lists:concat( [ "MOTD: ", Body, "~n" ] ) ),
+		%% Send a PRIVMSG
+		{ privmsg, Recipient, Message } ->
+			State#state.server_pid ! { send, irc:privmsg( Recipient, Message ) },
 			?MODULE:loop( State );
 		
-		{ irc, { { _, "375", _, _ }, _ }, _ } -> ?MODULE:loop( State );
-		{ irc, { { _, "376", _, _ }, _ }, _ } -> ?MODULE:loop( State );
-	
-		{ irc, { { _, "396", _, Args }, _ }, _ } ->
-			[ HostMask ] = Args,
-			io:format( "Host Mask: ~s~n", [ HostMask ] ),
-			?MODULE:loop( State );
-	
-		{ irc, { { _, "433", _, _ }, _ }, _ } ->
-			io:format( "!!! Nickname in use. Quitting.~n" ),
-			self() ! quit;
-	
-		{ irc, { { _, "451", _, _ }, Body }, _ } ->
-			io:format( lists:concat( [ "Notice: ", Body, "~n" ] ) ),
-			?MODULE:loop( State );
-	
 		%% Bot Commands
 		%%
 		%% -join Channel
 		%% -part Channel
 		%% -quit
 		%% -raw Input...
-		{ irc, { { [ MyOwner | _ ], "PRIVMSG", MyNick, _ }, [ $- | Body ] }, _ } ->
-			
-			spawn( fun() ->
-				[ Command | Args ] = string:tokens( Body, " " ),
-				io:format( ">>> Command: ~p, Args: ~p~n", [ Command, Args ] ),
-				case Command of
-				
-					%% Join a channel
-					"join" ->
-						[ Channel | _ ] = Args,
-						case irc:join( Channel ) of
-							{ error, Reason } -> io:format( "Join Error: ~p~n", [ Reason ] );
-							Irc               -> State#state.server_pid ! { send, Irc }
-						end;
-						
-					%% Part a channel
-					"part" ->
-						[ Channel | _ ] = Args,
-						case irc:part( Channel ) of
-							{ error, Reason } -> io:format( "Part Error: ~p~n", [ Reason ] );
-							Irc               -> State#state.server_pid ! { send, Irc }
-						end;
-					
-					%% Quit the server
-					"quit" ->
-						Message = lists:concat( [ string:join( Args, " " ), "\r\n" ] ),
-						State#state.server_pid ! { self(), send, irc:quit( Message ) };
-					
-					%% Inject Raw IRC
-					"raw" ->
-						Command = lists:concat( [ string:join( Args, " " ), "\r\n" ] ),
-						State#state.server_pid ! { send, Command };
-					
-					%% Anything else
-					_ -> io:format( ">>> Unknown Command: ~p Args: ~p~n", [ Command, Args ] )
-				end
-			end ),
-			
+		{ irc, Packet = { { [ MyOwner | _ ], "PRIVMSG", MyNick, _ }, [ $- | _ ] }, _ } ->
+			spawn( fun() -> handle_command( State, Packet ) end ),
 			?MODULE:loop( State );
 		
 		%% IRC Parse Error
@@ -175,7 +65,8 @@ loop( State ) ->
 	
 		%% IRC Packet Catch-all
 		{ irc, Packet, _Raw } ->
-			io:format( "Got: ~p~n", [ Packet ] ),
+			echo( { [ "Got a irc packet: ~p~n" ], [ Packet ] } ),
+			echo( Packet ),
 			?MODULE:loop( State );
 		
 		%% Parse a line from the server
@@ -211,4 +102,94 @@ loop( State ) ->
 			?MODULE:loop( State )
 		
 	end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Private Functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%====================================================================
+%% handle_command/1
+%%====================================================================
+handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
+	[ Command | Args ] = string:tokens( Body, " " ),
+	io:format( ">>> Command: ~p, Args: ~p~n", [ Command, Args ] ),
+	case Command of
 	
+		%% Echo
+		"echo" ->
+			State#state.server_pid ! { send, irc:privmsg( Nick, string:join( Args, " " ) ) };
+		
+		%% Join a channel
+		"join" ->
+			[ Channel | _ ] = Args,
+			case irc:join( Channel ) of
+				{ error, Reason } -> io:format( "Join Error: ~p~n", [ Reason ] );
+				Irc               -> State#state.server_pid ! { send, Irc }
+			end;
+			
+		%% Part a channel
+		"part" ->
+			[ Channel | _ ] = Args,
+			case irc:part( Channel ) of
+				{ error, Reason } -> io:format( "Part Error: ~p~n", [ Reason ] );
+				Irc               -> State#state.server_pid ! { send, Irc }
+			end;
+		
+		%% Quit the server
+		"quit" ->
+			Message = lists:concat( [ string:join( Args, " " ), "\r\n" ] ),
+			State#state.server_pid ! { self(), send, irc:quit( Message ) };
+		
+		%% Inject Raw IRC
+		"raw" ->
+			Command = lists:concat( [ string:join( Args, " " ), "\r\n" ] ),
+			State#state.server_pid ! { send, Command };
+		
+		%% Anything else
+		_ -> io:format( ">>> Unknown Command: ~p Args: ~p~n", [ Command, Args ] )
+	end.
+
+%%====================================================================
+%% echo/1
+%%====================================================================
+%% IRC Packet
+%%--------------------------------------------------------------------
+echo( { { [ Nick | _ ], Type, To, Args }, Body } ) ->
+	Message = case Type of
+		"001"     -> { [ "Welcome: ~s~n" ],                    [ Body ]                      };
+		"002"     -> { [ "Host: ~s~n" ],                       [ Body ]                      };
+		"003"     -> { [ "History: ~s~n" ],                    [ Body ]                      };
+		"004"     -> { [ "???: ~s~n" ],                        [ string:join( Args, ", " ) ] };
+		"005"     -> { [ "Options: Boring!~n" ],               []                            };
+		"042"     -> { [ "Unique ID: ~s~n" ],                  [ Args ]                      };
+		"252"     -> { [ "Operators Online: ~s~n" ],           [ Args ]                      };
+		"251"     -> { [ "Info: ~s~n" ],                       [ Body ]                      };
+		"254"     -> { [ "Active Channels: ~s~n" ],            [ Args ]                      };
+		"255"     -> { [ "Info: ~s~n" ],                       [ Body ]                      };
+		"265"     -> { [ "Local Load: ~s~n" ],                 [ Body ]                      };
+		"266"     -> { [ "Global Load: ~s~n" ],                [ Body ]                      };
+		"372"     -> { [ "MOTD: ~s~n" ],                       [ Body ]                      };
+		"375"     -> { [ "MOTD: ---Message of the Day---~n" ], []                            };
+		"376"     -> { [ "MOTD: ---Message of the Day---~n" ], []                            };
+		"396"     -> { [ "Host Mask: ~s~n" ],                  [ Args ]                      };
+		"433"     -> { [ "Error: Nickname in use~n" ],         []                            };
+		"451"     -> { [ "Notice: ~s~n" ],                     [ Body ]                      };
+		"NOTICE"  -> { [ "Notice: ~s~n" ],                     [ Body ]                      };
+		"MODE"    -> { [ "Mode: ~s~n" ],                       [ string:join( Args, ", " ) ] };
+		"PRIVMSG" -> { [ "Privmsg: (~s -> ~s) ~s~n" ],         [ Nick, To, Body ]            };
+		_        -> none
+	end,
+	case Message of
+		{ Format, Params } -> echo( { [ "IRC: " | Format ], Params } );
+		_                  -> no_message
+	end;
+%%--------------------------------------------------------------------
+%% Nothing
+%%--------------------------------------------------------------------
+echo( nothing ) ->
+	ok;
+%%--------------------------------------------------------------------
+%% Format and Arguments
+%%--------------------------------------------------------------------
+echo( { Format, Args } ) ->
+	io:format( lists:concat( [ "Bot> " | Format ] ), Args ).

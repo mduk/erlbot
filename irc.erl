@@ -8,8 +8,7 @@
 	part/2,
 	quit/0,
 	quit/1,
-	privmsg/2,
-	valid_channel_name/1
+	privmsg/2
 ] ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -28,8 +27,13 @@ parse_header( Line ) ->
 		0 -> Line;
 		BodyStart -> string:substr( Line, 1, BodyStart - 1 )
 	end,
-	[ From, Type, To | Args ] = string:tokens( Header, " " ),
-	{ parse_origin( From ), Type, To, parse_args( Args ) }.
+	case string:tokens( Header, " " ) of
+		[ From, Type, To | Args ] -> 
+			{ parse_origin( From ), Type, To, parse_args( Args ) };
+		
+		[ From, Type ] ->
+			{ parse_origin( From ), Type, [], [] }
+	end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% parse_origin/1
@@ -61,7 +65,7 @@ parse_body( Line ) ->
 %% join/1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 join( Channel ) ->
-	case ?MODULE:valid_channel_name( Channel ) of
+	case valid_channel_name( Channel ) of
 		false -> { error, "Invalid Channel Name" };
 		_     -> lists:concat( [ "JOIN ", Channel, "\r\n" ] )
 	end.
@@ -70,13 +74,16 @@ join( Channel ) ->
 %% part/1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 part( Channel ) ->
-	case ?MODULE:valid_channel_name( Channel ) of
+	case valid_channel_name( Channel ) of
 		false -> { error, "Invalid Channel Name" };
 		_     -> lists:concat( [ "PART ", Channel, "\r\n" ] )
 	end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% part/2
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 part( Channel, Message ) ->
-	case ?MODULE:valid_channel_name( Channel ) of
+	case valid_channel_name( Channel ) of
 		false -> { error, "Invalid Channel Name" };
 		_     -> lists:concat( [ "PART ", Channel, " :", Message, "\r\n" ] )
 	end.

@@ -1,114 +1,133 @@
 -module( bot ).
--compile( export_all ).
+
+-behaviour( gen_server ).
+-export( [ init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3 ] ).
+
+-export( [ start_link/3 ] ).
 
 -record( state, {
-	owner,
-	nick,
 	pid,
+	nick,
+	owner,
 	server_pid
 } ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% start/3
+%% Module API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start( Host, Owner, Nick ) ->
-	spawn( ?MODULE, init, [ Host, Owner, Nick ] ).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%==============================================================================
 %% start_link/3
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%==============================================================================
 start_link( Host, Owner, Nick ) ->
-	spawn_link( ?MODULE, init, [ Host, Owner, Nick ] ).
+	gen_server:start_link( ?MODULE, [ Host, Owner, Nick ], [] ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% init/3
+%% gen_server callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-init( Host, Owner, Nick ) ->
+
+%%==============================================================================
+%% init/1
+%%==============================================================================
+init( [ Host, Owner, Nick ] ) ->
 	Server = server:start_link( self(), Host, Nick ),
-	
 	State = #state{
 		owner = Owner,
 		nick = Nick,
 		pid = self(),
 		server_pid = Server
 	},
-	
-	?MODULE:loop( State ).
+	{ ok, State }.
+
+%%==============================================================================
+%% handle_call/3
+%%==============================================================================
+handle_call( _Request, _From, State ) ->
+	{ reply, ok, State }.
+
+%%==============================================================================
+%% handle_cast/2
+%%==============================================================================
+%% Send a PRIVMSG to a recipient
+%%------------------------------------------------------------------------------
+handle_cast( { privmsg, Recipient, Message }, State ) ->
+	State#state.server_pid ! { send, irc:privmsg( Recipient, Message ) },
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% Received PRIVMSG from Owner to Bot
+%%
+%% Spawn a command handler
+%%------------------------------------------------------------------------------
+handle_cast( { irc, Packet = { { [ Nick | _ ], "PRIVMSG", To, _ }, [ $- | _ ] }, _ }, State ) 
+when Nick == State#state.owner, To == State#state.nick ->
+	echo( Packet ),
+	spawn( fun() -> handle_command( State, Packet ) end ),
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% Catch all IRC packets
+%%------------------------------------------------------------------------------
+handle_cast( { irc, Packet, _Line }, State ) ->
+	echo( Packet ),
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% Got a line from the server
+%%------------------------------------------------------------------------------
+handle_cast( { incoming_line, Line }, State ) ->
+	process_flag( trap_exit, true ),
+	spawn_link( fun() -> gen_server:cast( State#state.pid, { irc, irc:parse( Line ), Line } ) end ),
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% A linked process exited normally
+%%------------------------------------------------------------------------------
+handle_cast( { 'EXIT', _, normal }, State ) ->
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% A linked process exited for some reason
+%%------------------------------------------------------------------------------
+handle_cast( { 'EXIT', Pid, Reason }, State ) ->
+	echo( { [ "~p crashed because ~p~n" ], [ Pid, Reason ] } ),
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% Server Disconnected
+%%------------------------------------------------------------------------------
+handle_cast( { _, disconnected }, State ) ->
+	echo( { [ "Server Disconnected~n" ] } ),
+	{ stop, server_disconnected, State };
+
+%%------------------------------------------------------------------------------
+%% Catch all casts
+%%
+%% Echo the packet to the shell
+%%------------------------------------------------------------------------------
+handle_cast( Message, State ) ->
+	echo( { [ "Unknown Cast: ~p~n" ], [ Message ] } ),
+	{ noreply, State }.
+
+%%==============================================================================
+%% handle_info/2
+%%==============================================================================
+handle_info( _Info, State ) ->
+	{ noreply, State }.
+
+%%==============================================================================
+%% terminate/2
+%%==============================================================================
+terminate( _Reason, _State ) -> 
+	ok.
+
+%%==============================================================================
+%% code_changed/3
+%%==============================================================================
+code_change( _OldVsn, State, _Extra ) -> 
+	{ ok, State }.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% loop/1
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-loop( State ) ->
-	MyOwner = State#state.owner,
-	MyNick = State#state.nick,
-	receive
-	
-		%% Send a PRIVMSG
-		{ privmsg, Recipient, Message } ->
-			State#state.server_pid ! { send, irc:privmsg( Recipient, Message ) },
-			?MODULE:loop( State );
-		
-		%% Bot Commands
-		%%
-		%% -join Channel
-		%% -part Channel
-		%% -quit
-		%% -raw Input...
-		{ irc, Packet = { { [ MyOwner | _ ], "PRIVMSG", MyNick, _ }, [ $- | _ ] }, _ } ->
-			spawn( fun() -> handle_command( State, Packet ) end ),
-			?MODULE:loop( State );
-		
-		%% IRC Parse Error
-		{ irc, error, Line } ->
-			io:format( "Parse Error: ~s~n", [ Line ] ),
-			?MODULE:loop( State );
-	
-		%% IRC Packet Catch-all
-		{ irc, Packet, _Raw } ->
-			echo( Packet ),
-			?MODULE:loop( State );
-		
-		%% Parse a line from the server
-		{ incoming_line, Line } ->
-			
-			process_flag( trap_exit, true ),
-			spawn_link( fun() -> 
-				State#state.pid ! { irc, irc:parse( Line ), Line }
-			end ),
-			
-			?MODULE:loop( State );
-		
-		%% A linked process exited normally
-		{ 'EXIT', _, normal } ->
-			?MODULE:loop( State );
-		
-		%% A linked process exited for some reason
-		{ 'EXIT', Pid, Reason } ->
-			io:format( "~p crashed because ~p~n", [ Pid, Reason ] ),
-			?MODULE:loop( State );
-		
-		%% Server Disconnected
-		{ _, disconnected } 
-			-> io:format( "Server Disconnected~n" );
-	
-		%% Quit
-		quit 
-			-> State#state.server_pid ! { send, irc:quit() };
-		
-		%% Anything else
-		Unknown -> 
-			io:format( "Bot got: ~p~n", [ Unknown ] ),
-			?MODULE:loop( State )
-		
-	end.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Private Functions
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%====================================================================
+%%==============================================================================
 %% handle_command/1
-%%====================================================================
+%%==============================================================================
 handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 	[ Command | Args ] = string:tokens( Body, " " ),
 	io:format( ">>> Command: ~p, Args: ~p~n", [ Command, Args ] ),
@@ -148,11 +167,11 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 		_ -> io:format( ">>> Unknown Command: ~p Args: ~p~n", [ Command, Args ] )
 	end.
 
-%%====================================================================
+%%==============================================================================
 %% echo/1
-%%====================================================================
+%%==============================================================================
 %% IRC Packet
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 echo( { { [ Nick | _ ], Type, To, Args }, Body } ) ->
 	Message = case Type of
 		"001"     -> { [ "Welcome: ~s~n" ],                    [ Body ]                      };
@@ -182,13 +201,13 @@ echo( { { [ Nick | _ ], Type, To, Args }, Body } ) ->
 		{ Format, Params } -> echo( { [ "IRC: " | Format ], Params } );
 		_                  -> no_message
 	end;
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% Nothing
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 echo( nothing ) ->
 	ok;
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% Format and Arguments
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 echo( { Format, Args } ) ->
 	io:format( lists:concat( [ "Bot> " | Format ] ), Args ).

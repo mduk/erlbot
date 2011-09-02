@@ -10,7 +10,7 @@ start( Pid, Host, Nick ) ->
 	spawn( ?MODULE, init, [ Pid, Host, 6667, Nick ] ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% start_link/2
+%% start_link/3
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link( Pid, { Host, Port }, Nick ) ->
 	spawn_link( ?MODULE, init, [ Pid, Host, Port, Nick ] );
@@ -95,15 +95,7 @@ process_incoming( Bot, Data ) ->
 			Line = string:substr( Data, 1, Position - 1 ),
 			Remainder = string:substr( Data, Position + 2, string:len( Data ) - ( Position - 1 ) ),
 			
-			%% Attempt to parse remainder
-			%% if it fails then accumulate for the next lot
-
-			Bot ! { incoming_line, Line },
-			
-%			spawn( fun() -> 
-%				io:format( "> ~s~n", [ Line ] )
-%				Bot ! { irc, irc:parse( Line ) }
-%			end ),
+			gen_server:cast( Bot, { incoming_line, Line } ),
 			
 			?MODULE:process_incoming( Bot, Remainder )
 	end.

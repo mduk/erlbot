@@ -126,45 +126,37 @@ code_change( _OldVsn, State, _Extra ) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%==============================================================================
-%% handle_command/1
+%% handle_command/2
 %%==============================================================================
 handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
-	[ Command | Args ] = string:tokens( Body, " " ),
-	io:format( ">>> Command: ~p, Args: ~p~n", [ Command, Args ] ),
-	case Command of
+	case string:tokens( Body, " " ) of
 	
 		%% Echo
-		"echo" ->
-			State#state.server_pid ! { send, irc:privmsg( Nick, string:join( Args, " " ) ) };
+		[ "echo" | Tail ] ->
+			State#state.server_pid ! { send, irc:privmsg( Nick, string:join( Tail, " " ) ) };
 		
 		%% Join a channel
-		"join" ->
-			[ Channel | _ ] = Args,
+		[ "join", Channel ] ->
 			case irc:join( Channel ) of
 				{ error, Reason } -> io:format( "Join Error: ~p~n", [ Reason ] );
 				Irc               -> State#state.server_pid ! { send, Irc }
 			end;
 			
 		%% Part a channel
-		"part" ->
-			[ Channel | _ ] = Args,
+		[ "part", Channel ] ->
 			case irc:part( Channel ) of
 				{ error, Reason } -> io:format( "Part Error: ~p~n", [ Reason ] );
 				Irc               -> State#state.server_pid ! { send, Irc }
 			end;
 		
-		%% Quit the server
-		"quit" ->
-			Message = lists:concat( [ string:join( Args, " " ), "\r\n" ] ),
-			State#state.server_pid ! { self(), send, irc:quit( Message ) };
-		
 		%% Inject Raw IRC
-		"raw" ->
-			Command = lists:concat( [ string:join( Args, " " ), "\r\n" ] ),
-			State#state.server_pid ! { send, Command };
+		[ "raw" | Tail ] ->
+			Irc = lists:concat( [ string:join( Tail, " " ), "\r\n" ] ),
+			State#state.server_pid ! { send, Irc };
 		
 		%% Anything else
-		_ -> io:format( ">>> Unknown Command: ~p Args: ~p~n", [ Command, Args ] )
+		Unknown ->
+			io:format( ">>> Unknown Command: ~s~n", [ Unknown ] )
 	end.
 
 %%==============================================================================

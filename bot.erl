@@ -96,8 +96,6 @@ handle_cast( { privmsg, Recipient, Message }, State ) ->
 	{ noreply, State };
 %%------------------------------------------------------------------------------
 %% Received PRIVMSG from Owner to Bot
-%%
-%% Spawn a command handler
 %%------------------------------------------------------------------------------
 handle_cast( { irc, Packet = { { [ Nick | _ ], "PRIVMSG", To, _ }, [ $- | _ ] }, _ }, State ) 
 when Nick == State#state.owner, To == State#state.nick ->
@@ -126,19 +124,17 @@ handle_cast( { 'EXIT', _, normal }, State ) ->
 %% A linked process exited for some reason
 %%------------------------------------------------------------------------------
 handle_cast( { 'EXIT', Pid, Reason }, State ) ->
-	echo( { [ "~p crashed because ~p~n" ], [ Pid, Reason ] } ),
+	echo( { "~p crashed because ~p~n", [ Pid, Reason ] } ),
 	{ noreply, State };
 %%------------------------------------------------------------------------------
 %% Server Disconnected
 %%------------------------------------------------------------------------------
 handle_cast( { _, disconnected }, State ) ->
-	echo( { [ "Server Disconnected~n" ] } ),
+	echo( "Server Disconnected~n" ),
 	{ stop, server_disconnected, State };
 
 %%------------------------------------------------------------------------------
 %% Catch all casts
-%%
-%% Echo the packet to the shell
 %%------------------------------------------------------------------------------
 handle_cast( Message, State ) ->
 	echo( { [ "Unknown Cast: ~p~n" ], [ Message ] } ),
@@ -199,31 +195,31 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 %%------------------------------------------------------------------------------
 echo( { { [ Nick | _ ], Type, To, Args }, Body } ) ->
 	Message = case Type of
-		"001"     -> { [ "Welcome: ~s~n" ],                    [ Body ]                      };
-		"002"     -> { [ "Host: ~s~n" ],                       [ Body ]                      };
-		"003"     -> { [ "History: ~s~n" ],                    [ Body ]                      };
-		"004"     -> { [ "???: ~s~n" ],                        [ string:join( Args, ", " ) ] };
-		"005"     -> { [ "Options: Boring!~n" ],               []                            };
-		"042"     -> { [ "Unique ID: ~s~n" ],                  [ Args ]                      };
-		"252"     -> { [ "Operators Online: ~s~n" ],           [ Args ]                      };
-		"251"     -> { [ "Info: ~s~n" ],                       [ Body ]                      };
-		"254"     -> { [ "Active Channels: ~s~n" ],            [ Args ]                      };
-		"255"     -> { [ "Info: ~s~n" ],                       [ Body ]                      };
-		"265"     -> { [ "Local Load: ~s~n" ],                 [ Body ]                      };
-		"266"     -> { [ "Global Load: ~s~n" ],                [ Body ]                      };
-		"372"     -> { [ "MOTD: ~s~n" ],                       [ Body ]                      };
-		"375"     -> { [ "MOTD: ---Message of the Day---~n" ], []                            };
-		"376"     -> { [ "MOTD: ---Message of the Day---~n" ], []                            };
-		"396"     -> { [ "Host Mask: ~s~n" ],                  [ Args ]                      };
-		"433"     -> { [ "Error: Nickname in use~n" ],         []                            };
-		"451"     -> { [ "Notice: ~s~n" ],                     [ Body ]                      };
-		"NOTICE"  -> { [ "Notice: ~s~n" ],                     [ Body ]                      };
-		"MODE"    -> { [ "Mode: ~s~n" ],                       [ string:join( Args, ", " ) ] };
-		"PRIVMSG" -> { [ "Privmsg: (~s -> ~s) ~s~n" ],         [ Nick, To, Body ]            };
+		"001"     -> { "Welcome: ~s~n",                    [ Body ]                      };
+		"002"     -> { "Host: ~s~n",                       [ Body ]                      };
+		"003"     -> { "History: ~s~n",                    [ Body ]                      };
+		"004"     -> { "???: ~s~n",                        [ string:join( Args, ", " ) ] };
+		"005"     -> { "Options: Boring!~n",               []                            };
+		"042"     -> { "Unique ID: ~s~n",                  [ Args ]                      };
+		"252"     -> { "Operators Online: ~s~n",           [ Args ]                      };
+		"251"     -> { "Info: ~s~n",                       [ Body ]                      };
+		"254"     -> { "Active Channels: ~s~n",            [ Args ]                      };
+		"255"     -> { "Info: ~s~n",                       [ Body ]                      };
+		"265"     -> { "Local Load: ~s~n",                 [ Body ]                      };
+		"266"     -> { "Global Load: ~s~n",                [ Body ]                      };
+		"372"     -> { "MOTD: ~s~n",                       [ Body ]                      };
+		"375"     -> { "MOTD: ---Message of the Day---~n", []                            };
+		"376"     -> { "MOTD: ---Message of the Day---~n", []                            };
+		"396"     -> { "Host Mask: ~s~n",                  [ Args ]                      };
+		"433"     -> { "Error: Nickname in use~n",         []                            };
+		"451"     -> { "Notice: ~s~n",                     [ Body ]                      };
+		"NOTICE"  -> { "Notice: ~s~n",                     [ Body ]                      };
+		"MODE"    -> { "Mode: ~s~n",                       [ string:join( Args, ", " ) ] };
+		"PRIVMSG" -> { "Privmsg: (~s -> ~s) ~s~n",         [ Nick, To, Body ]            };
 		_        -> none
 	end,
 	case Message of
-		{ Format, Params } -> echo( { [ "IRC: " | Format ], Params } );
+		{ Format, Params } -> echo( { lists:concat( [ "IRC: ", Format ] ), Params } );
 		_                  -> no_message
 	end;
 %%------------------------------------------------------------------------------
@@ -235,4 +231,9 @@ echo( nothing ) ->
 %% Format and Arguments
 %%------------------------------------------------------------------------------
 echo( { Format, Args } ) ->
-	io:format( lists:concat( [ "Bot> " | Format ] ), Args ).
+	io:format( lists:concat( [ "Bot> ", Format ] ), Args );
+%%------------------------------------------------------------------------------
+%% Just Format
+%%------------------------------------------------------------------------------
+echo( Format ) ->
+	io:format( lists:concat( [ "Bot> ", Format ] ) ).

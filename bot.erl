@@ -3,7 +3,12 @@
 -behaviour( gen_server ).
 -export( [ init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3 ] ).
 
--export( [ start_link/3 ] ).
+-export( [ 
+	start_link/3,
+	join/2,
+	part/2,
+	part/3
+] ).
 
 -record( state, {
 	pid,
@@ -21,6 +26,24 @@
 %%==============================================================================
 start_link( Host, Owner, Nick ) ->
 	gen_server:start_link( ?MODULE, [ Host, Owner, Nick ], [] ).
+
+%%==============================================================================
+%% join/2
+%%==============================================================================
+join( Bot, Channel ) ->
+	gen_server:cast( Bot, { join, Channel } ).
+
+%%==============================================================================
+%% part/2
+%%==============================================================================
+part( Bot, Channel ) ->
+	gen_server:cast( Bot, { part, Channel, "" } ).
+
+%%==============================================================================
+%% part/3
+%%==============================================================================
+part( Bot, Channel, Message ) ->
+	gen_server:cast( Bot, { part, Channel, Message } ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_server callbacks
@@ -48,6 +71,24 @@ handle_call( _Request, _From, State ) ->
 %%==============================================================================
 %% handle_cast/2
 %%==============================================================================
+%% Join a channel
+%%------------------------------------------------------------------------------
+handle_cast( { join, Channel }, State ) ->
+	case irc:join( Channel ) of
+		{ error, Reason } -> io:format( "Join Error: ~p~n", [ Reason ] );
+		Irc               -> State#state.server_pid ! { send, Irc }
+	end,
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% Part a channel
+%%------------------------------------------------------------------------------
+handle_cast( { part, Channel, Message }, State ) ->
+	case irc:part( Channel, Message ) of
+		{ error, Reason } -> io:format( "Part Error: ~p~n", [ Reason ] );
+		Irc               -> State#state.server_pid ! { send, Irc }
+	end,
+	{ noreply, State };
+%%------------------------------------------------------------------------------
 %% Send a PRIVMSG to a recipient
 %%------------------------------------------------------------------------------
 handle_cast( { privmsg, Recipient, Message }, State ) ->
@@ -136,18 +177,10 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 			State#state.server_pid ! { send, irc:privmsg( Nick, string:join( Tail, " " ) ) };
 		
 		%% Join a channel
-		[ "join", Channel ] ->
-			case irc:join( Channel ) of
-				{ error, Reason } -> io:format( "Join Error: ~p~n", [ Reason ] );
-				Irc               -> State#state.server_pid ! { send, Irc }
-			end;
+		[ "join", Channel ] -> bot:join( State#state.pid, Channel );
 			
 		%% Part a channel
-		[ "part", Channel ] ->
-			case irc:part( Channel ) of
-				{ error, Reason } -> io:format( "Part Error: ~p~n", [ Reason ] );
-				Irc               -> State#state.server_pid ! { send, Irc }
-			end;
+		[ "part", Channel ] -> bot:part( State#state.pid, Channel );
 		
 		%% Inject Raw IRC
 		[ "raw" | Tail ] ->

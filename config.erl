@@ -3,6 +3,9 @@
 { owner, "macdan" }.
 
 { channels, [
-	"#erl1",
-	"#erl2"
+
+	{ "#erl2", [
+		{ plugins, [ foobar ] }
+	] }
+
 ] }.

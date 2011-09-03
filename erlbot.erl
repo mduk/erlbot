@@ -15,14 +15,14 @@ start( Config ) ->
 	{ ok, Bot } = bot:start_link( Host, Owner, Nick ),
 	
 	case proplists:lookup( channels, Config ) of
-		none     -> nevermind;
-		{ _, Channels } ->
-			 spawn( fun() ->
-			 timer:sleep( 3000 ),
-			 	lists:foreach( fun( Channel ) ->
-			 		bot:join( Bot, Channel )
-			 	end, Channels )
-			 end )
+		none            -> nevermind;
+		{ _, Channels } -> spawn( ?MODULE, start_channels, [ Bot, Channels ] )
 	end,
 	
 	Bot.
+
+start_channels( Bot, Channels ) ->
+	timer:sleep( 3000 ),
+	lists:foreach( fun( Channel ) ->
+		bot:join( Bot, Channel )
+	end, Channels ).

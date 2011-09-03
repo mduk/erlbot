@@ -7,7 +7,9 @@
 	start_link/3,
 	join/2,
 	part/2,
-	part/3
+	part/3,
+	say/3,
+	register_plugin/3
 ] ).
 
 -record( state, {
@@ -45,6 +47,18 @@ part( Bot, Channel ) ->
 %%==============================================================================
 part( Bot, Channel, Message ) ->
 	gen_server:cast( Bot, { part, Channel, Message } ).
+
+%%==============================================================================
+%% say/3
+%%==============================================================================
+say( Bot, Recipient, Message ) ->
+	gen_server:cast( Bot, { privmsg, Recipient, Message } ).
+
+%%==============================================================================
+%% register_plugin/3
+%%==============================================================================
+register_plugin( Bot, Channel, Plugin ) ->
+	gen_server:cast( Bot, { register_plugin, Channel, Plugin } ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_server callbacks
@@ -104,6 +118,14 @@ handle_cast( { part, Channel, Message }, State ) ->
 %%------------------------------------------------------------------------------
 handle_cast( { privmsg, Recipient, Message }, State ) ->
 	State#state.server_pid ! { send, irc:privmsg( Recipient, Message ) },
+	{ noreply, State };
+%%------------------------------------------------------------------------------
+%% Register a plugin on a channel
+%%------------------------------------------------------------------------------
+handle_cast( { register_plugin, Channel, Plugin }, State ) ->
+	case proplists:lookup( Channel, State#state.channels ) of
+		{ _, Pid } -> channel:register_plugin( Pid, Plugin )
+	end,
 	{ noreply, State };
 %%------------------------------------------------------------------------------
 %% Received PRIVMSG from Owner to Bot
@@ -207,6 +229,21 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 				gen_server:cast( State#state.pid, { privmsg, Nick, lists:concat( [ "  ", Channel ] ) } )
 			end, State#state.channels );
 		
+		[ "plugin", "register", Channel, Plugin ] ->
+			case proplists:lookup( Channel, State#state.channels ) of
+				{ _, ChannelPid } ->
+					
+					PluginName = list_to_atom( Plugin ),
+					{ ok, PluginPid } = PluginName:start_link(),
+					channel:register_plugin( ChannelPid, PluginPid ),
+					
+					bot:say( State#state.pid, Nick, io_lib:format( 
+						"Plugin ~p (~s) registered on channel ~p (~s).", 
+						[ PluginPid, Plugin, ChannelPid, Channel ]
+					) )
+			end;
+			
+		
 		%% Inject Raw IRC
 		[ "raw" | Tail ] ->
 			Irc = lists:concat( [ string:join( Tail, " " ), "\r\n" ] ),
@@ -214,7 +251,7 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 		
 		%% Anything else
 		Unknown ->
-			io:format( ">>> Unknown Command: ~s~n", [ Unknown ] )
+			io:format( ">>> Unknown Command: ~s~n", [ string:join( Unknown, " " ) ] )
 	end.
 
 %%==============================================================================

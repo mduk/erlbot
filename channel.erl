@@ -9,13 +9,15 @@
 	part/1,
 	part/2,
 	say/2,
-	handle/2
+	handle/2,
+	register_plugin/2
 ] ).
 
 -record( state, {
 	bot,
 	server,
-	channel
+	channel,
+	plugins
 } ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -58,6 +60,12 @@ say( Channel, Message ) ->
 handle( Channel, Packet ) ->
 	gen_server:cast( Channel, Packet ).
 
+%%====================================================================
+%% register_plugin/2
+%%====================================================================
+register_plugin( Channel, Plugin ) when is_pid( Plugin ) ->
+	gen_server:cast( Channel, { register_plugin, Plugin } ).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_server callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -65,7 +73,8 @@ init( [ Bot, Server, Channel] ) ->
 	State = #state{
 		bot = Bot,
 		server = Server,
-		channel = Channel
+		channel = Channel,
+		plugins = []
 	},
 	{ ok, State }.
 
@@ -99,13 +108,21 @@ handle_cast( { part, Message }, State ) ->
 %% Say something to the channel
 %%--------------------------------------------------------------------
 handle_cast( { say, Message }, State ) ->
-	State#state.server ! { send, irc:say( State#state.channel, Message ) },
+	State#state.server ! { send, irc:privmsg( State#state.channel, Message ) },
 	{ noreply, State };
+%%--------------------------------------------------------------------
+%% Register a Plugin
+%%--------------------------------------------------------------------
+handle_cast( { register_plugin, Plugin }, State ) ->
+	NewState = State#state{ plugins = [ Plugin | State#state.plugins ] },
+	{ noreply, NewState };
 %%--------------------------------------------------------------------
 %% All PRIVMSGs to the channel
 %%--------------------------------------------------------------------
 handle_cast( _Packet = { { [ Nick | _ ], "PRIVMSG", _, _ }, Message }, State ) ->
-	io:format( "Channel(~s)> (~s) ~s~n", [ State#state.channel, Nick, Message ] ),
+	lists:foreach( fun( Plugin ) ->
+		gen_server:cast( Plugin, { self(), privmsg, Nick, Message } )
+	end, State#state.plugins ),
 	{ noreply, State };
 %%--------------------------------------------------------------------
 %% Catch all casts

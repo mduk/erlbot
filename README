@@ -5,6 +5,11 @@ A project to teach me erlang, coincidentially also an IRC bot!
 
 Supported bot commands:
 	
+	Echo:
+		-echo foobar
+		
+		Says foobar back to you. Mainly used as a quick test so see if the bot is still alive.
+	
 	Join Channel: 
 		-channel join #channel
 		
@@ -25,6 +30,11 @@ Supported bot commands:
 		
 		Spawns a gen_server callback module and registers it with
 		the channel process.
+	
+	Raw:
+		-raw PRIVMSG user :Message
+		
+		Manually inject IRC protocol into the stream.
 
 Vaguely How it Works
 ====================

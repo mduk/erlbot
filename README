@@ -3,7 +3,33 @@ Erlbot
 
 A project to teach me erlang, coincidentially also an IRC bot!
 
-Supported bot commands:
+Config
+======
+
+The bot can be started with erlbot:start/1 which expects a property list of config terms. 
+If the bot is started with erlbot:start/0 then the file config.erl will be consulted and 
+it's contents will be used as the configuration property list for erlbot:start/1. Note 
+ that in config.erl you don't enclose the terms in a list: [ ...terms... ]. Simply delimit
+terms with a full stop ".".
+
+The config syntax is standard Erlang term notation. All config terms are tuples of two elements, the first being an atom identifying the key, the second being the value: { key, Value }.
+
+Options
+-------
+
+IRC Server Address: { host, "example.com" }. Or with a port: { host, { "example.com", 6667 } }.	
+
+Bot Owner: { owner, "OwnerNickname" }.
+
+Bot Nickname: { nick, "BotNickname" }.
+
+Default Channels: { channels, [ "#channel1", "#channel2" ] }.
+
+
+Bot Commands
+============
+
+Bot commands are PRIVMSGs sent directly from the Bot Owner to the Bot.
 	
 	Echo:
 		-echo foobar
@@ -43,7 +69,7 @@ A 'server' process is spawned, this is responsible for handling the socket to th
 
 On receiving a line, the bot spawns a process to parse it. If the line can't be parsed then the parse process crashes. If the line is successfully parsed then a message is sent back to the bot process containing the parsed packet as an erlang term.
 
-Upon receiving an IRC packet containing a PRIVMSG sent directly from the bot owner to the bot, a bot:handle_command/2 process is spawned and given the packet. If the packet doesn't contain a bot command, then the handle_bot_command process will crash and no action will be taken.
+Upon receiving an IRC packet containing a PRIVMSG sent directly from the bot owner to the bot, a bot:handle_command/2 process is spawned and given the packet. If the packet doesn't contain a bot command, then the bot:handle_command/2 process will crash and no action will be taken.
 
 A bot command to join a channel will spawn a new 'channel' process and send a cast to it telling it to join. A channel process will stay alive after you part the channel, letting you keep any registered plugins.
 

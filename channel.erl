@@ -17,7 +17,8 @@
 	bot,
 	server,
 	channel,
-	plugins
+	plugins,
+	status
 } ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -74,7 +75,8 @@ init( [ Bot, Server, Channel] ) ->
 		bot = Bot,
 		server = Server,
 		channel = Channel,
-		plugins = []
+		plugins = [],
+		status = parted
 	},
 	{ ok, State }.
 
@@ -91,19 +93,19 @@ handle_call( _Request, _From, State ) ->
 %%--------------------------------------------------------------------
 handle_cast( join, State ) ->
 	State#state.server ! { send, irc:join( State#state.channel ) },
-	{ noreply, State };
+	{ noreply, State#state{ status = joined } };
 %%--------------------------------------------------------------------
 %% Part the channel
 %%--------------------------------------------------------------------
 handle_cast( part, State ) ->
 	State#state.server ! { send, irc:part( State#state.channel ) },
-	{ noreply, State };
+	{ noreply, State#state{ status = parted } };
 %%--------------------------------------------------------------------
 %% Part the channel with a message
 %%--------------------------------------------------------------------
 handle_cast( { part, Message }, State ) ->
 	State#state.server ! { send, irc:part( State#state.channel, Message ) },
-	{ noreply, State };
+	{ noreply, State#state{ status = parted } };
 %%--------------------------------------------------------------------
 %% Say something to the channel
 %%--------------------------------------------------------------------

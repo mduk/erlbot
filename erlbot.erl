@@ -1,13 +1,23 @@
 -module( erlbot ).
--export( [ start/0, start/1 ] ).
+-behaviour( application ).
+-export( [ start/2, stop/1 ] ).
 
-start() ->
-	case file:consult( "config.erl" ) of
-		{ ok, Config } -> start( Config );
-		Err            -> io:format( "Can't read config. ~p~n", [ Err ] )
-	end.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% application callbacks
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-start( Config ) ->
+%%====================================================================
+%% start/2
+%%====================================================================
+%% Start without arguments - read config file
+%%--------------------------------------------------------------------
+start( Type, [] ) ->
+	{ ok, Config } = file:consult( "config.erl" ),
+	start( Type, Config );
+%%--------------------------------------------------------------------
+%% Start with arguments
+%%--------------------------------------------------------------------
+start( _Type, Config ) ->
 	{ host, Host } = proplists:lookup( host, Config ),
 	{ nick, Nick } = proplists:lookup( nick, Config ),
 	{ owner, Owner } = proplists:lookup( owner, Config ),
@@ -16,11 +26,26 @@ start( Config ) ->
 	
 	case proplists:lookup( channels, Config ) of
 		none            -> nevermind;
-		{ _, Channels } -> spawn( ?MODULE, start_channels, [ Bot, Channels ] )
+		{ _, Channels } -> spawn( fun() -> start_channels( Bot, Channels ) end )
 	end,
 	
-	Bot.
+	{ ok, Bot }.
 
+%%====================================================================
+%% stop/2
+%%====================================================================
+stop( _State ) ->
+	ok.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% private functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%====================================================================
+%% start_channels/2
+%%====================================================================
+%% Join default channels
+%%--------------------------------------------------------------------
 start_channels( Bot, Channels ) ->
 	timer:sleep( 3000 ),
 	lists:foreach( fun( Channel ) ->

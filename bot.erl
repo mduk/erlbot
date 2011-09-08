@@ -231,16 +231,8 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 		
 		[ "plugin", "register", Channel, Plugin ] ->
 			case proplists:lookup( Channel, State#state.channels ) of
-				{ _, ChannelPid } ->
-					
-					PluginName = list_to_atom( Plugin ),
-					{ ok, PluginPid } = PluginName:start_link(),
-					channel:register_plugin( ChannelPid, PluginPid ),
-					
-					bot:say( State#state.pid, Nick, io_lib:format( 
-						"Plugin ~p (~s) registered on channel ~p (~s).", 
-						[ PluginPid, Plugin, ChannelPid, Channel ]
-					) )
+				{ _, ChannelPid } -> 
+					channel:start_plugin( ChannelPid, list_to_atom( Plugin ) )
 			end;
 			
 		
@@ -282,7 +274,7 @@ echo( { { [ Nick | _ ], Type, To, Args }, Body } ) ->
 		"NOTICE"  -> { "Notice: ~s~n",                     [ Body ]                      };
 		"MODE"    -> { "Mode: ~s~n",                       [ string:join( Args, ", " ) ] };
 		"PRIVMSG" -> { "Privmsg: (~s -> ~s) ~s~n",         [ Nick, To, Body ]            };
-		_        -> none
+		_         -> none
 	end,
 	case Message of
 		{ Format, Params } -> echo( { lists:concat( [ "IRC: ", Format ] ), Params } );

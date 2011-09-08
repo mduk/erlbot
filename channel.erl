@@ -10,7 +10,8 @@
 	part/2,
 	say/2,
 	handle/2,
-	register_plugin/2
+	register_plugin/2,
+	start_plugin/2
 ] ).
 
 -record( state, {
@@ -67,6 +68,12 @@ handle( Channel, Packet ) ->
 register_plugin( Channel, Plugin ) when is_pid( Plugin ) ->
 	gen_server:cast( Channel, { register_plugin, Plugin } ).
 
+%%====================================================================
+%% start_plugin/2
+%%====================================================================
+start_plugin( Channel, Plugin ) ->
+	gen_server:cast( Channel, { start_plugin, Plugin } ).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_server callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -119,9 +126,17 @@ handle_cast( { register_plugin, Plugin }, State ) ->
 	NewState = State#state{ plugins = [ Plugin | State#state.plugins ] },
 	{ noreply, NewState };
 %%--------------------------------------------------------------------
+%% Start a Plugin
+%%--------------------------------------------------------------------
+handle_cast( { start_plugin, Plugin }, State ) ->
+	{ ok, PluginPid } = Plugin:start_link(),
+	NewState = State#state{ plugins = [ PluginPid | State#state.plugins ] },
+	{ noreply, NewState };
+%%--------------------------------------------------------------------
 %% All PRIVMSGs to the channel
 %%--------------------------------------------------------------------
 handle_cast( _Packet = { { [ Nick | _ ], "PRIVMSG", _, _ }, Message }, State ) ->
+	io:format( "~s> (~s) ~s~n", [ State#state.channel, Nick, Message ] ),
 	lists:foreach( fun( Plugin ) ->
 		gen_server:cast( Plugin, { self(), privmsg, Nick, Message } )
 	end, State#state.plugins ),

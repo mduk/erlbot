@@ -1,6 +1,12 @@
 -module( erlbot ).
+
+-export( [ start/0 ] ).
+
 -behaviour( application ).
 -export( [ start/2, stop/1 ] ).
+
+start() ->
+	application:start( erlbot ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% application callbacks

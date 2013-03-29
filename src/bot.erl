@@ -216,11 +216,11 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 		
 		%% Join a channel
 		[ "channel", "join", Channel ] -> 
-			bot:join( State#state.pid, Channel );
+			join( State#state.pid, Channel );
 			
 		%% Part a channel
 		[ "channel", "part", Channel ] -> 
-			bot:part( State#state.pid, Channel );
+			part( State#state.pid, Channel );
 		
 		%% List channels
 		[ "channel", "list" ] -> 

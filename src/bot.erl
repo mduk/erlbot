@@ -132,7 +132,7 @@ handle_cast( { register_plugin, Channel, Plugin }, State ) ->
 %%------------------------------------------------------------------------------
 handle_cast( { irc, Packet = { { [ Nick | _ ], "PRIVMSG", To, _ }, [ $- | _ ] }, _ }, State ) 
 when Nick == State#state.owner, To == State#state.nick ->
-	echo( Packet ),
+	echo( State, Packet ),
 	process_flag( trap_exit, true ),
 	spawn_link( fun() -> handle_command( State, Packet ) end ),
 	{ noreply, State };
@@ -148,7 +148,7 @@ handle_cast( { irc, Packet = { { _, "PRIVMSG", To = "#" ++ _, _ }, _ }, _Line },
 %% Catch all IRC packets
 %%------------------------------------------------------------------------------
 handle_cast( { irc, Packet, _Line }, State ) ->
-	echo( Packet ),
+	echo( State, Packet ),
 	{ noreply, State };
 %%------------------------------------------------------------------------------
 %% Got a line from the server
@@ -166,20 +166,20 @@ handle_cast( { 'EXIT', _, normal }, State ) ->
 %% A linked process exited for some reason
 %%------------------------------------------------------------------------------
 handle_cast( { 'EXIT', Pid, Reason }, State ) ->
-	echo( { "~p crashed because ~p~n", [ Pid, Reason ] } ),
+	echo( State, { "~p crashed because ~p~n", [ Pid, Reason ] } ),
 	{ noreply, State };
 %%------------------------------------------------------------------------------
 %% Server Disconnected
 %%------------------------------------------------------------------------------
 handle_cast( { _, disconnected }, State ) ->
-	echo( "Server Disconnected~n" ),
+	echo( State, "Server Disconnected~n" ),
 	{ stop, server_disconnected, State };
 
 %%------------------------------------------------------------------------------
 %% Catch all casts
 %%------------------------------------------------------------------------------
 handle_cast( Message, State ) ->
-	echo( { [ "Unknown Cast: ~p~n" ], [ Message ] } ),
+	echo( State, { [ "Unknown Cast: ~p~n" ], [ Message ] } ),
 	{ noreply, State }.
 
 %%==============================================================================
@@ -251,7 +251,7 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 %%==============================================================================
 %% IRC Packet
 %%------------------------------------------------------------------------------
-echo( { { [ Nick | _ ], Type, To, Args }, Body } ) ->
+echo( State, { { [ Nick | _ ], Type, To, Args }, Body } ) ->
 	Message = case Type of
 		"001"     -> { "Welcome: ~s~n",                    [ Body ]                      };
 		"002"     -> { "Host: ~s~n",                       [ Body ]                      };
@@ -277,21 +277,21 @@ echo( { { [ Nick | _ ], Type, To, Args }, Body } ) ->
 		_         -> none
 	end,
 	case Message of
-		{ Format, Params } -> echo( { lists:concat( [ "IRC: ", Format ] ), Params } );
+		{ Format, Params } -> echo( State, { lists:concat( [ "IRC: ", Format ] ), Params } );
 		_                  -> no_message
 	end;
 %%------------------------------------------------------------------------------
 %% Nothing
 %%------------------------------------------------------------------------------
-echo( nothing ) ->
+echo( _, nothing ) ->
 	ok;
 %%------------------------------------------------------------------------------
 %% Format and Arguments
 %%------------------------------------------------------------------------------
-echo( { Format, Args } ) ->
-	io:format( lists:concat( [ "Bot> ", Format ] ), Args );
+echo( State, { Format, Args } ) ->
+	io:format( lists:concat( [ "Bot [", State#state.nick, "]> ", Format ] ), Args );
 %%------------------------------------------------------------------------------
 %% Just Format
 %%------------------------------------------------------------------------------
-echo( Format ) ->
-	io:format( lists:concat( [ "Bot> ", Format ] ) ).
+echo( State, Format ) ->
+	io:format( lists:concat( [ "Bot [", State#state.nick, "]> ", Format ] ) ).

@@ -135,11 +135,17 @@ handle_cast( { start_plugin, Plugin }, State ) ->
 %%--------------------------------------------------------------------
 %% All PRIVMSGs to the channel
 %%--------------------------------------------------------------------
-handle_cast( _Packet = { { [ Nick | _ ], "PRIVMSG", _, _ }, Message }, State ) ->
+handle_cast( { { [ Nick | _ ], "PRIVMSG", _, _ }, Message }, State ) ->
 	io:format( "~s> (~s) ~s~n", [ State#state.channel, Nick, Message ] ),
 	lists:foreach( fun( Plugin ) ->
 		gen_server:cast( Plugin, { self(), privmsg, Nick, Message } )
 	end, State#state.plugins ),
+	{ noreply, State };
+%%--------------------------------------------------------------------
+%% All other packets
+%%--------------------------------------------------------------------
+handle_cast( Packet = { { _, _, _, _ }, _ }, State ) ->
+	io:format( "~s> Packet: ~p~n", [ State#state.channel, Packet ] ),
 	{ noreply, State };
 %%--------------------------------------------------------------------
 %% Catch all casts

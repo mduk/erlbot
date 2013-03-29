@@ -139,7 +139,7 @@ when Nick == State#state.owner, To == State#state.nick ->
 %%------------------------------------------------------------------------------
 %% IRC PRIVMSGs
 %%------------------------------------------------------------------------------
-handle_cast( { irc, Packet = { { _, "PRIVMSG", To = "#" ++ _, _ }, _ }, _Line }, State ) ->
+handle_cast( { irc, Packet = { { _, _, To = "#" ++ _, _ }, _ }, _Line }, State ) ->
 	case proplists:lookup( To, State#state.channels ) of
 		{ _, Pid } -> gen_server:cast( Pid, Packet )
 	end,

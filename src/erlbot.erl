@@ -23,19 +23,27 @@ start( Type, [] ) ->
 %%--------------------------------------------------------------------
 %% Start with arguments
 %%--------------------------------------------------------------------
-start( _Type, Config ) ->
+start( _Type, Conf ) ->
+	R = erlbot_sup:start_link(),
+	Bots = proplists:lookup_all( bot, Conf ),
+	start_bots( Bots ),
+	R.
+
+start_bots( [ { bot, Alias, Config } | Bots ]  ) ->
 	{ host, Host } = proplists:lookup( host, Config ),
 	{ nick, Nick } = proplists:lookup( nick, Config ),
 	{ owner, Owner } = proplists:lookup( owner, Config ),
 	
-	{ ok, Bot } = bot:start_link( Host, Owner, Nick ),
+	{ ok, Bot } = erlbot_sup:start_worker( Alias, bot, start_link, [ Host, Owner, Nick ] ),
 	
 	case proplists:lookup( channels, Config ) of
 		none            -> nevermind;
 		{ _, Channels } -> spawn( fun() -> start_channels( Bot, Channels ) end )
 	end,
 	
-	{ ok, Bot }.
+	start_bots( Bots );
+start_bots( [] ) ->
+	ok.
 
 %%====================================================================
 %% stop/2

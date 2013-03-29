@@ -6,6 +6,7 @@
 -export( [ start/2, stop/1 ] ).
 
 start() ->
+	application:start( sasl ),
 	application:start( erlbot ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

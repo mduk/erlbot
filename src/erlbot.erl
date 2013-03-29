@@ -34,7 +34,7 @@ start_bots( [ { bot, Alias, Config } | Bots ]  ) ->
 	{ nick, Nick } = proplists:lookup( nick, Config ),
 	{ owner, Owner } = proplists:lookup( owner, Config ),
 	
-	{ ok, Bot } = erlbot_sup:start_worker( Alias, bot, start_link, [ Host, Owner, Nick ] ),
+	{ ok, Bot } = erlbot_sup:start_worker( Alias, erlbot_bot, start_link, [ Host, Owner, Nick ] ),
 	
 	case proplists:lookup( channels, Config ) of
 		none            -> nevermind;

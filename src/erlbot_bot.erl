@@ -128,10 +128,10 @@ handle_cast( { register_plugin, Channel, Plugin }, State ) ->
 	end,
 	{ noreply, State };
 %%------------------------------------------------------------------------------
-%% Received PRIVMSG from Owner to Bot
+%% Received command message from Owner
 %%------------------------------------------------------------------------------
-handle_cast( { irc, Packet = { { [ Nick | _ ], "PRIVMSG", To, _ }, [ $- | _ ] }, _ }, State ) 
-when Nick == State#state.owner, To == State#state.nick ->
+handle_cast( { irc, Packet = { { [ Nick | _ ], "PRIVMSG", _, _ }, [ $- | _ ] }, _ }, State ) 
+when Nick == State#state.owner ->
 	echo( State, Packet ),
 	process_flag( trap_exit, true ),
 	spawn_link( fun() -> handle_command( State, Packet ) end ),
@@ -205,14 +205,20 @@ code_change( _OldVsn, State, _Extra ) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%==============================================================================
+%% reply_recipient/1
+%%==============================================================================
+reply_recipient( { { _, _, Channel = "#" ++ _, _ }, _ } ) -> Channel;
+reply_recipient( { { [ Nick | _ ], _, _, _ }, _ } ) -> Nick.
+
+%%==============================================================================
 %% handle_command/2
 %%==============================================================================
-handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
+handle_command( State, Packet = { { [ _Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 	case string:tokens( Body, " " ) of
 	
 		%% Echo
 		[ "echo" | Tail ] ->
-			State#state.server_pid ! { send, irc:privmsg( Nick, string:join( Tail, " " ) ) };
+			State#state.server_pid ! { send, irc:privmsg( reply_recipient( Packet ), string:join( Tail, " " ) ) };
 		
 		%% Join a channel
 		[ "channel", "join", Channel ] -> 
@@ -224,9 +230,10 @@ handle_command( State, { { [ Nick | _ ], _, _, _ }, "-" ++ Body } ) ->
 		
 		%% List channels
 		[ "channel", "list" ] -> 
-			gen_server:cast( State#state.pid, { privmsg, Nick, "Channels: " } ),
+			Recipient = reply_recipient( Packet ),
+			gen_server:cast( State#state.pid, { privmsg, Recipient, "Channels: " } ),
 			lists:foreach( fun( { Channel, _ } ) ->
-				gen_server:cast( State#state.pid, { privmsg, Nick, lists:concat( [ "  ", Channel ] ) } )
+				gen_server:cast( State#state.pid, { privmsg, Recipient, lists:concat( [ "  ", Channel ] ) } )
 			end, State#state.channels );
 		
 		[ "plugin", "register", Channel, Plugin ] ->
